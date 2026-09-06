@@ -1,0 +1,65 @@
+{
+    "audit_timestamp": "2026-09-06T17:28:39.197852",
+    "underwriting_threshold": 0.35,
+    "sample_size": 2000,
+    "overall_status": "CERTIFIED COMPLIANT",
+    "gender_audit": {
+        "attribute_name": "Gender (CODE_GENDER)",
+        "privileged_group": "M",
+        "unprivileged_group": "F",
+        "privileged_metrics": {
+            "count": 655,
+            "approval_rate": 0.9969,
+            "tpr_approval": 0.9966,
+            "fpr_approval": 1.0,
+            "actual_creditworthy_rate": 0.8947,
+            "observed_default_rate": 0.1053
+        },
+        "unprivileged_metrics": {
+            "count": 1345,
+            "approval_rate": 0.9896,
+            "tpr_approval": 0.9951,
+            "fpr_approval": 0.9344,
+            "actual_creditworthy_rate": 0.9093,
+            "observed_default_rate": 0.0907
+        },
+        "disparate_impact_ratio": 0.9927,
+        "demographic_parity_difference": 0.0073,
+        "equal_opportunity_difference": 0.0015,
+        "four_fifths_threshold": 0.8,
+        "four_fifths_compliant": true,
+        "status": "COMPLIANT (PASS)"
+    },
+    "age_audit": {
+        "attribute_name": "Age Cohort (AGE_GROUP)",
+        "privileged_group": ">= 30",
+        "unprivileged_group": "< 30",
+        "privileged_metrics": {
+            "count": 1640,
+            "approval_rate": 0.9915,
+            "tpr_approval": 0.996,
+            "fpr_approval": 0.9474,
+            "actual_creditworthy_rate": 0.9073,
+            "observed_default_rate": 0.0927
+        },
+        "unprivileged_metrics": {
+            "count": 360,
+            "approval_rate": 0.9944,
+            "tpr_approval": 0.9938,
+            "fpr_approval": 1.0,
+            "actual_creditworthy_rate": 0.8917,
+            "observed_default_rate": 0.1083
+        },
+        "disparate_impact_ratio": 1.0029,
+        "demographic_parity_difference": 0.0029,
+        "equal_opportunity_difference": 0.0022,
+        "four_fifths_threshold": 0.8,
+        "four_fifths_compliant": true,
+        "status": "COMPLIANT (PASS)"
+    },
+    "regulatory_notes": {
+        "four_fifths_rule": "Under EEOC/CFPB guidelines, a selection rate for any group that is less than 80% (4/5ths) of the rate for the group with the highest rate constitutes evidence of disparate impact.",
+        "equal_opportunity": "Measures whether creditworthy borrowers of all demographics have equal probability of obtaining loan approval.",
+        "ecoa_fcra": "Equal Credit Opportunity Act (ECOA) & Fair Credit Reporting Act (FCRA) prohibit discrimination based on protected demographics."
+    }
+}

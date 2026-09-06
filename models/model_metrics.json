@@ -1,0 +1,101 @@
+{
+    "best_algorithm": "CatBoost",
+    "benchmark_comparison": [
+        {
+            "model": "LightGBM",
+            "roc_auc": 0.7363,
+            "pr_auc": 0.2392,
+            "f1_score": 0.2928,
+            "brier_score": 0.107
+        },
+        {
+            "model": "XGBoost",
+            "roc_auc": 0.7304,
+            "pr_auc": 0.235,
+            "f1_score": 0.2954,
+            "brier_score": 0.1072
+        },
+        {
+            "model": "CatBoost",
+            "roc_auc": 0.7432,
+            "pr_auc": 0.2443,
+            "f1_score": 0.2951,
+            "brier_score": 0.109
+        },
+        {
+            "model": "CatBoost (Isotonic Calibrated)",
+            "roc_auc": 0.7337,
+            "pr_auc": 0.2193,
+            "f1_score": 0.0773,
+            "brier_score": 0.0809
+        }
+    ],
+    "calibration_curves": {
+        "raw": {
+            "prob_pred": [
+                0.05606982708867352,
+                0.14805413529179517,
+                0.2453866139430653,
+                0.3465492318268649,
+                0.44585699863578787,
+                0.547977283318479,
+                0.6495351571351856,
+                0.7336571332526423,
+                0.8016985463865087
+            ],
+            "prob_true": [
+                0.02287581699346405,
+                0.06262626262626263,
+                0.10416666666666667,
+                0.135678391959799,
+                0.183206106870229,
+                0.1981981981981982,
+                0.33766233766233766,
+                0.2894736842105263,
+                1.0
+            ]
+        },
+        "calibrated": {
+            "prob_pred": [
+                0.0496962662240975,
+                0.19172672299270083,
+                0.2736530241482953,
+                0.3573336983487442
+            ],
+            "prob_true": [
+                0.05823957643944408,
+                0.14906832298136646,
+                0.2305084745762712,
+                0.3333333333333333
+            ]
+        }
+    },
+    "feature_count": 23,
+    "feature_names": [
+        "AMT_INCOME_TOTAL",
+        "AMT_CREDIT",
+        "AMT_ANNUITY",
+        "AMT_GOODS_PRICE",
+        "DAYS_BIRTH",
+        "DAYS_EMPLOYED",
+        "EXT_SOURCE_1",
+        "EXT_SOURCE_2",
+        "EXT_SOURCE_3",
+        "AGE_YEARS",
+        "EMPLOYMENT_YEARS",
+        "CREDIT_TO_INCOME_RATIO",
+        "ANNUITY_TO_INCOME_RATIO",
+        "CREDIT_TERM",
+        "GOODS_TO_CREDIT_RATIO",
+        "EXT_SOURCES_MEAN",
+        "CODE_GENDER_F",
+        "CODE_GENDER_M",
+        "NAME_EDUCATION_TYPE_Academic degree",
+        "NAME_EDUCATION_TYPE_Higher education",
+        "NAME_EDUCATION_TYPE_Incomplete higher",
+        "NAME_EDUCATION_TYPE_Lower secondary",
+        "NAME_EDUCATION_TYPE_Secondary / secondary special"
+    ],
+    "test_sample_size": 2000,
+    "test_default_rate": 0.0955
+}
