@@ -370,8 +370,9 @@ def get_customer_factor_explanation(
     sim_emp: int,
 ) -> dict:
     """Generates plain conversational English explanations and actionable guidance tailored to applicant details."""
-    dti = (sim_annuity / sim_income) if sim_income > 0 else 0
-    lti = (sim_credit / sim_income) if sim_income > 0 else 0
+    monthly_inc = (sim_income / 12.0) if sim_income > 0 else 1.0
+    dti = (sim_annuity / monthly_inc) * 100.0 if monthly_inc > 0 else 0.0
+    lti = (sim_credit / sim_income) if sim_income > 0 else 0.0
 
     if "CREDIT_TO_INCOME" in feat or feat == "AMT_CREDIT":
         return {
@@ -382,7 +383,7 @@ def get_customer_factor_explanation(
     elif "ANNUITY_TO_INCOME" in feat or feat == "AMT_ANNUITY":
         return {
             "title": "Existing monthly repayment obligations are too heavy",
-            "detail": f"The scheduled monthly installment of {format_inr(sim_annuity)} absorbs {dti:.1%} of your monthly income. Responsible lending standards typically require monthly repayment obligations to remain under 30%–35% of total income to avoid financial strain.",
+            "detail": f"The scheduled monthly installment of {format_inr(sim_annuity)} absorbs {dti:.1f}% of your monthly income. Responsible lending standards typically require monthly repayment obligations to remain under 30%–35% of total income to avoid financial strain.",
             "action": "Selecting a longer repayment tenure lowers your monthly installment into a safer repayment bracket.",
         }
     elif feat == "EXT_SOURCE_2":
@@ -446,20 +447,20 @@ def get_risk_theme(prob: float):
             "action": "Approved",
             "desc": "Applicant profile comfortably satisfies loan underwriting criteria.",
         }
-    elif prob <= 0.50:
+    elif prob < 0.50:
         return {
             "tier": "Medium Risk",
             "badge_class": "risk-badge-med",
             "color": "#f59e0b",
-            "action": "Needs Further Review",
-            "desc": "Application requires underwriter review or additional verification.",
+            "action": "Manual Review / Conditional",
+            "desc": "Application requires underwriter review or compensatory conditions.",
         }
     else:
         return {
             "tier": "High Risk",
             "badge_class": "risk-badge-high",
             "color": "#ef4444",
-            "action": "Not Approved",
+            "action": "Not Approved / Rejected",
             "desc": "Financial metrics exceed standard portfolio risk limits.",
         }
 
@@ -498,95 +499,147 @@ def main():
         applicant_options,
         index=default_idx,
         help="Choose a borrower from the held-out test cohort",
+        key="selected_applicant_selector",
     )
     selected_applicant_id = selected_id
 
     # Fetch baseline applicant row
     baseline_row = df_test[df_test["SK_ID_CURR"] == selected_id].iloc[0]
 
+    # Reactive state synchronization across applicant switches
+    if "current_applicant_id" not in st.session_state:
+        st.session_state["current_applicant_id"] = selected_id
+    elif st.session_state["current_applicant_id"] != selected_id:
+        st.session_state["current_applicant_id"] = selected_id
+        # Clear cached slider states for previous applicant to guarantee clean baseline initialization
+        for k in [
+            f"income_{selected_id}", f"credit_{selected_id}", f"annuity_{selected_id}",
+            f"goods_{selected_id}", f"debts_{selected_id}", f"history_{selected_id}",
+            f"loans_{selected_id}", f"name_{selected_id}", f"age_{selected_id}",
+            f"emp_{selected_id}", f"edu_{selected_id}", f"gender_{selected_id}",
+        ]:
+            if k in st.session_state:
+                del st.session_state[k]
+
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🎛️ Counterfactual 'What-If' Simulation")
     st.sidebar.caption("Adjust variables to simulate counterfactual credit scenarios in real-time.")
 
-    # Simulation Sliders
+    # 1-Click Reset Button to immediately revert to this applicant's baseline
+    if st.sidebar.button("🔄 Reset to Baseline", use_container_width=True, help="Revert all sliders to this applicant's official baseline file"):
+        for k in [
+            f"income_{selected_id}", f"credit_{selected_id}", f"annuity_{selected_id}",
+            f"goods_{selected_id}", f"debts_{selected_id}", f"history_{selected_id}",
+            f"loans_{selected_id}", f"name_{selected_id}", f"age_{selected_id}",
+            f"emp_{selected_id}", f"edu_{selected_id}", f"gender_{selected_id}",
+        ]:
+            if k in st.session_state:
+                del st.session_state[k]
+        st.rerun()
+
+    # Simulation Sliders strictly keyed to the active applicant for instant reactive state
+    raw_income = int(baseline_row["AMT_INCOME_TOTAL"])
     sim_income = st.sidebar.slider(
         "Annual Income:",
-        min_value=25000,
-        max_value=1200000,
-        value=int(baseline_row["AMT_INCOME_TOTAL"]),
+        min_value=10000,
+        max_value=2000000,
+        value=int(np.clip(raw_income, 10000, 2000000)),
         step=5000,
         format="₹%d",
+        key=f"income_{selected_id}",
     )
 
+    raw_credit = int(baseline_row["AMT_CREDIT"])
     sim_credit = st.sidebar.slider(
         "Loan Amount Requested:",
-        min_value=50000,
-        max_value=3000000,
-        value=int(baseline_row["AMT_CREDIT"]),
+        min_value=25000,
+        max_value=5000000,
+        value=int(np.clip(raw_credit, 25000, 5000000)),
         step=10000,
         format="₹%d",
+        key=f"credit_{selected_id}",
     )
 
+    raw_annuity = int(baseline_row["AMT_ANNUITY"])
     sim_annuity = st.sidebar.slider(
         "Monthly / Scheduled Installment:",
-        min_value=2000,
-        max_value=180000,
-        value=int(baseline_row["AMT_ANNUITY"]),
+        min_value=1000,
+        max_value=250000,
+        value=int(np.clip(raw_annuity, 1000, 250000)),
         step=1000,
         format="₹%d",
+        key=f"annuity_{selected_id}",
     )
 
+    raw_goods = int(baseline_row["AMT_GOODS_PRICE"]) if pd.notnull(baseline_row["AMT_GOODS_PRICE"]) else int(baseline_row["AMT_CREDIT"])
     sim_goods = st.sidebar.slider(
         "Property / Goods Valuation:",
-        min_value=30000,
-        max_value=3000000,
-        value=int(baseline_row["AMT_GOODS_PRICE"]) if pd.notnull(baseline_row["AMT_GOODS_PRICE"]) else int(baseline_row["AMT_CREDIT"]),
+        min_value=25000,
+        max_value=5000000,
+        value=int(np.clip(raw_goods, 25000, 5000000)),
         step=10000,
         format="₹%d",
+        key=f"goods_{selected_id}",
     )
 
     st.sidebar.markdown("##### Credit Bureau Ratings")
+    raw_debts = float(baseline_row["EXT_SOURCE_1"]) if pd.notnull(baseline_row["EXT_SOURCE_1"]) else 0.50
     existing_debts = sim_existing_debts = st.sidebar.slider(
         "Existing Debts (0.0 to 1.0):",
         min_value=0.01,
         max_value=0.99,
-        value=float(baseline_row["EXT_SOURCE_1"]) if pd.notnull(baseline_row["EXT_SOURCE_1"]) else 0.50,
+        value=float(np.clip(raw_debts, 0.01, 0.99)),
         step=0.01,
+        key=f"debts_{selected_id}",
     )
+
+    raw_history = float(baseline_row["EXT_SOURCE_2"]) if pd.notnull(baseline_row["EXT_SOURCE_2"]) else 0.50
     credit_history = sim_credit_history = st.sidebar.slider(
         "Credit History (0.0 to 1.0):",
         min_value=0.01,
         max_value=0.99,
-        value=float(baseline_row["EXT_SOURCE_2"]) if pd.notnull(baseline_row["EXT_SOURCE_2"]) else 0.50,
+        value=float(np.clip(raw_history, 0.01, 0.99)),
         step=0.01,
+        key=f"history_{selected_id}",
     )
+
+    raw_loans = float(baseline_row["EXT_SOURCE_3"]) if pd.notnull(baseline_row["EXT_SOURCE_3"]) else 0.50
     previous_loans = sim_previous_loans = st.sidebar.slider(
         "Previous Loans (0.0 to 1.0):",
         min_value=0.01,
         max_value=0.99,
-        value=float(baseline_row["EXT_SOURCE_3"]) if pd.notnull(baseline_row["EXT_SOURCE_3"]) else 0.50,
+        value=float(np.clip(raw_loans, 0.01, 0.99)),
         step=0.01,
+        key=f"loans_{selected_id}",
     )
 
     st.sidebar.markdown("##### Applicant Name & Age")
-    applicant_name = st.sidebar.text_input("Applicant Name:", value="Applicant #" + str(selected_applicant_id))
+    applicant_name = st.sidebar.text_input(
+        "Applicant Name:",
+        value="Applicant #" + str(selected_applicant_id),
+        key=f"name_{selected_id}",
+    )
     display_name = applicant_name.strip() if applicant_name.strip() else f"Applicant #{selected_applicant_id}"
 
+    raw_age = int(baseline_row["AGE_YEARS"])
     sim_age = st.sidebar.slider(
         "Age in Years:",
         min_value=21,
-        max_value=70,
-        value=int(baseline_row["AGE_YEARS"]),
+        max_value=75,
+        value=int(np.clip(raw_age, 21, 75)),
         step=1,
+        key=f"age_{selected_id}",
     )
 
     st.sidebar.markdown("##### Employment Details")
+    raw_emp = int(baseline_row["EMPLOYMENT_YEARS"])
     sim_emp = st.sidebar.slider(
         "Employment Tenure (Years):",
         min_value=0,
-        max_value=40,
-        value=int(baseline_row["EMPLOYMENT_YEARS"]),
+        max_value=45,
+        value=int(np.clip(raw_emp, 0, 45)),
         step=1,
+        key=f"emp_{selected_id}",
     )
 
     edu_options = [
@@ -597,11 +650,11 @@ def main():
         "Academic degree",
     ]
     current_edu_idx = edu_options.index(baseline_row["NAME_EDUCATION_TYPE"]) if baseline_row["NAME_EDUCATION_TYPE"] in edu_options else 0
-    sim_edu = st.sidebar.selectbox("Education Level:", edu_options, index=current_edu_idx)
+    sim_edu = st.sidebar.selectbox("Education Level:", edu_options, index=current_edu_idx, key=f"edu_{selected_id}")
 
-    sim_gender = st.sidebar.radio("Gender:", ["M", "F"], index=0 if baseline_row["CODE_GENDER"] == "M" else 1, horizontal=True)
+    sim_gender = st.sidebar.radio("Gender:", ["M", "F"], index=0 if baseline_row["CODE_GENDER"] == "M" else 1, horizontal=True, key=f"gender_{selected_id}")
 
-    # Construct active applicant DataFrame
+    # 1. Dynamic Reactive Feature Vector (Task 1) - directly constructed from active inputs
     active_dict = {
         "SK_ID_CURR": selected_id,
         "AMT_INCOME_TOTAL": float(sim_income),
@@ -621,11 +674,18 @@ def main():
     # Transform through pipeline
     df_active_prep = preprocessor.transform(df_active)
 
-    # Inference: Calibrated probability & Base margin
+    # 2. Dynamic Model Inference on the updated vector (Task 2)
     active_cal_prob = float(best_model.predict_proba(df_active_prep.values)[0, 1])
     active_raw_prob = float(base_model.predict_proba(df_active_prep.values)[0, 1])
 
+    # 3. Dynamic Status Tiers (Task 3)
     theme = get_risk_theme(active_cal_prob)
+
+    # 4. Dynamic Metric Computations (Task 2)
+    monthly_income = (float(sim_income) / 12.0) if sim_income > 0 else 1.0
+    monthly_repayment_burden = (float(sim_annuity) / monthly_income) * 100.0 if monthly_income > 0 else 0.0
+    total_loan_multiple = (float(sim_credit) / float(sim_income)) if sim_income > 0 else 0.0
+    overall_credit_health = float(np.mean([existing_debts, credit_history, previous_loans]))
 
     # Check if inputs differ from baseline
     is_modified = (
@@ -637,6 +697,8 @@ def main():
         or previous_loans != baseline_row["EXT_SOURCE_3"]
         or sim_age != baseline_row["AGE_YEARS"]
         or sim_emp != baseline_row["EMPLOYMENT_YEARS"]
+        or sim_edu != baseline_row["NAME_EDUCATION_TYPE"]
+        or sim_gender != baseline_row["CODE_GENDER"]
     )
 
     # App Header - Clean & Professional
@@ -656,7 +718,7 @@ def main():
     )
     st.markdown("<hr style='border: 0; border-top: 1px solid rgba(255,255,255,0.08); margin: 4px 0 20px 0;'>", unsafe_allow_html=True)
 
-    # ------------------ CUSTOMER-FRIENDLY UNDERWRITING CARDS ------------------
+    # ------------------ DYNAMIC UNDERWRITING METRIC CARDS ------------------
     b1, b2, b3, b4 = st.columns([1.05, 0.95, 1.25, 1.55])
 
     with b1:
@@ -667,7 +729,7 @@ def main():
                     Chance of Repayment Difficulty
                 </div>
                 <div style="font-size: 2.35rem; font-weight: 700; color: {theme['color']}; margin: 8px 0 4px 0;">
-                    {active_cal_prob:.1%}
+                    {active_cal_prob * 100:.1f}%
                 </div>
                 <div style="color: #64748b; font-size: 0.8rem; font-weight: 500;">
                     Estimated risk score
@@ -714,9 +776,6 @@ def main():
         )
 
     with b4:
-        dti = (sim_annuity / sim_income) if sim_income > 0 else 0
-        lti = (sim_credit / sim_income) if sim_income > 0 else 0
-        ext_mean = float(np.mean([existing_debts, credit_history, previous_loans]))
         st.markdown(
             f"""
             <div class="decision-card">
@@ -724,9 +783,9 @@ def main():
                     Key Underwriting Ratios
                 </div>
                 <div style="margin-top: 8px; font-size: 0.88rem; line-height: 1.7;">
-                    <div>• Monthly Repayment Burden: <strong style="color: {'#ef4444' if dti > 0.35 else '#38bdf8'};">{dti:.1%} of Income</strong></div>
-                    <div>• Total Loan Amount: <strong>{lti:.1f}x Annual Income</strong></div>
-                    <div>• Overall Credit Health Rating (0 to 1): <strong style="color: {'#10b981' if ext_mean >= 0.55 else '#f59e0b'};">{ext_mean:.3f}</strong></div>
+                    <div>• Monthly Repayment Burden: <strong style="color: {'#ef4444' if monthly_repayment_burden > 35.0 else '#38bdf8'};">{monthly_repayment_burden:.1f}% of Monthly Income</strong></div>
+                    <div>• Total Loan Amount: <strong>{total_loan_multiple:.1f}x Annual Income</strong></div>
+                    <div>• Overall Credit Health Rating (0 to 1): <strong style="color: {'#10b981' if overall_credit_health >= 0.50 else '#f59e0b'};">{overall_credit_health:.3f}</strong></div>
                 </div>
             </div>
             """,
@@ -847,8 +906,8 @@ def main():
                     </div>
                     <hr style="border: 0; border-top: 1px solid rgba(16, 185, 129, 0.25); margin: 16px 0;">
                     <div style="font-size: 0.95rem; color: #d1fae5; line-height: 1.9;">
-                        <div>• <strong>Healthy Debt Burden:</strong> Your monthly repayment obligation of <strong>₹{sim_annuity:,.0f} ({dti:.1%} of monthly income)</strong> is well within safe repayment parameters.</div>
-                        <div>• <strong>Balanced Loan Multiple:</strong> Requested loan amount is <strong>{lti:.1f}x your annual income</strong> (₹{sim_credit:,.0f} requested vs ₹{sim_income:,.0f} income), representing conservative borrowing.</div>
+                        <div>• <strong>Healthy Debt Burden:</strong> Your monthly repayment obligation of <strong>₹{sim_annuity:,.0f} ({monthly_repayment_burden:.1f}% of monthly income)</strong> is well within safe repayment parameters.</div>
+                        <div>• <strong>Balanced Loan Multiple:</strong> Requested loan amount is <strong>{total_loan_multiple:.1f}x your annual income</strong> (₹{sim_credit:,.0f} requested vs ₹{sim_income:,.0f} income), representing conservative borrowing.</div>
                         <div>• <strong>Strong Credit Standing:</strong> Credit History rating (<strong>{credit_history:.2f}/1.00</strong>) and Existing Debts score (<strong>{existing_debts:.2f}/1.00</strong>) demonstrate reliable financial discipline.</div>
                     </div>
                 </div>
@@ -856,11 +915,11 @@ def main():
                 unsafe_allow_html=True,
             )
         else:
-            is_rejected = theme["action"] == "Not Approved"
+            is_rejected = "Rejected" in theme["action"] or theme["action"] == "Not Approved"
             status_color = "#ef4444" if is_rejected else "#f59e0b"
             status_bg = "rgba(153, 27, 27, 0.25)" if is_rejected else "rgba(146, 64, 14, 0.25)"
             status_icon = "✕" if is_rejected else "!"
-            status_title = "Application Decision: Not Approved" if is_rejected else "Application Decision: Additional Underwriter Review Required"
+            status_title = "Application Decision: Not Approved / Rejected" if is_rejected else "Application Decision: Manual Review / Conditional Required"
             status_desc = (
                 "This application does not currently meet our automated underwriting approval thresholds. Below is a clear explanation of the key factors and actionable steps to qualify."
                 if is_rejected

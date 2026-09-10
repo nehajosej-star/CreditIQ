@@ -21,3 +21,5 @@ fi
 echo "[3/3] Launching Streamlit Loan Officer Decision Cockpit..."
 echo "Access the cockpit locally at: http://localhost:8501"
 streamlit run app/streamlit_app.py --server.port 8501 --server.headless false
+
+
